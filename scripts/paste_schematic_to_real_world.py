@@ -196,6 +196,11 @@ def main():
         default=-20.0,
         help="Camera pitch angle in degrees (negative=down, positive=up). Default: -20"
     )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Only calculate camera and chunk information without modifying the world or rendering"
+    )
     
     args = parser.parse_args()
     
@@ -225,17 +230,31 @@ def main():
         shutil.copytree(args.world, backup_path)
     
     try:
-        # Paste schematic into world
-        world_bounds = paste_schematic_into_world(args.world, args.schematic, paste_location)
-        
-        # Calculate chunks
+        if args.dry_run:
+            logger.info("Dry run enabled - calculating bounds without modifying world")
+            schematic = load_schematic(args.schematic)
+            schematic_bounds = get_schematic_bounds(schematic)
+            schematic_width = schematic_bounds.size_x
+            schematic_height = schematic_bounds.size_y
+            schematic_depth = schematic_bounds.size_z
+            schematic.close()
+
+            world_bounds = SelectionBox(
+                (paste_x, paste_y, paste_z),
+                (paste_x + schematic_width, paste_y + schematic_height, paste_z + schematic_depth)
+            )
+        else:
+            # Paste schematic into world
+            world_bounds = paste_schematic_into_world(args.world, args.schematic, paste_location)
+
+            # Get schematic dimensions from world_bounds
+            schematic_width = world_bounds.max_x - world_bounds.min_x
+            schematic_height = world_bounds.max_y - world_bounds.min_y
+            schematic_depth = world_bounds.max_z - world_bounds.min_z
+
+        # Calculate chunks (useful for both real renders and dry runs)
         chunk_list = get_chunks_for_bounds(world_bounds)
         logger.info(f"Schematic occupies {len(chunk_list)} chunks")
-        
-        # Get schematic dimensions from world_bounds
-        schematic_width = world_bounds.max_x - world_bounds.min_x
-        schematic_height = world_bounds.max_y - world_bounds.min_y
-        schematic_depth = world_bounds.max_z - world_bounds.min_z
         
         # Calculate structure center
         center_x = paste_x + schematic_width / 2
@@ -274,12 +293,29 @@ def main():
             }
         }
         
-        logger.info(f"Camera: pos=({camera_params['position']['x']:.1f}, "
-                   f"{camera_params['position']['y']:.1f}, "
-                   f"{camera_params['position']['z']:.1f}), "
-                   f"yaw={camera_params['orientation']['yaw']:.1f}°, "
-                   f"pitch={camera_params['orientation']['pitch']:.1f}°")
-        
+        logger.info(
+            "Camera: pos=(%.1f, %.1f, %.1f), yaw=%.1f°, pitch=%.1f°",
+            camera_params['position']['x'],
+            camera_params['position']['y'],
+            camera_params['position']['z'],
+            camera_params['orientation']['yaw'],
+            camera_params['orientation']['pitch']
+        )
+
+        if args.dry_run:
+            logger.info("Dry run complete - no world modifications or renders were performed")
+            logger.info(
+                "Summary: size=(%.1f, %.1f, %.1f), center=(%.1f, %.1f, %.1f), chunks=%s",
+                schematic_width,
+                schematic_height,
+                schematic_depth,
+                center_x,
+                center_y,
+                center_z,
+                chunk_list
+            )
+            return
+
         # Generate scene using EXACT settings from working test_VOID_FIXED
         # Use consistent scene name - Chunky will update the existing scene and snapshots
         scene_name = "schematic_render"
