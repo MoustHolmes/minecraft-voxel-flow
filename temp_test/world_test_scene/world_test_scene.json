@@ -1,0 +1,66 @@
+{
+  "sdfVersion": 9,
+  "name": "world_test_scene",
+  "width": 512,
+  "height": 512,
+  "exposure": 1.0,
+  "postprocess": "NONE",
+  "outputMode": "PNG",
+  "renderTime": 0,
+  "spp": 0,
+  "sppTarget": 100,
+  "pathTrace": true,
+  "dumpFrequency": 0,
+  "saveSnapshots": true,
+  "saveDumps": false,
+  "camera": {
+    "name": "camera_1",
+    "projectionMode": "PINHOLE",
+    "fov": 70.0,
+    "dof": "Infinity",
+    "focalOffset": 2.0,
+    "position": {
+      "x": 57,
+      "y": 60,
+      "z": 166
+    },
+    "orientation": {
+      "pitch": -30.0,
+      "yaw": 45.0,
+      "roll": 0.0
+    }
+  },
+  "sun": {
+    "enabled": true,
+    "azimuth": 225.0,
+    "altitude": 45.0,
+    "intensity": 1.0,
+    "color": {
+      "red": 1.0,
+      "green": 1.0,
+      "blue": 1.0
+    }
+  },
+  "sky": {
+    "skyYaw": 0.0,
+    "skyMirrored": false,
+    "skyLight": 1.0,
+    "mode": "SIMULATED",
+    "horizonOffset": 0.1
+  },
+  "world": {
+    "path": "/Users/moustholmes/minecraft_voxel_flow/data/world_test_file/whyjan-halloween-2025-map",
+    "dimension": 0
+  },
+  "transparentSky": false,
+  "renderActors": false,
+  "entities": [],
+  "emitterIntensity": 13.0,
+  "emitterSamplingStrategy": "ONE",
+  "biomeColorsEnabled": true,
+  "stillWater": false,
+  "clearWater": false,
+  "atmosphereEnabled": true,
+  "volumetricFogEnabled": false,
+  "waterHeight": 0
+}

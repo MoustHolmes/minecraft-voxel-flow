@@ -1,0 +1,4 @@
+Traceback (most recent call last):
+  File "/Users/moustholmes/minecraft_voxel_flow/scripts/build_minecraft_world.py", line 17, in <module>
+    from nbtlib.tag import Int, Long, Byte, String, Double, Compound, File
+ImportError: cannot import name 'File' from 'nbtlib.tag' (/Users/moustholmes/minecraft_voxel_flow/.venv/lib/python3.12/site-packages/nbtlib/tag.py)

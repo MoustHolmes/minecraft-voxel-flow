@@ -1,0 +1,9 @@
+# Requirements for Chunky Rendering Pipeline
+# Install with: pip install -r requirements_rendering.txt
+
+# Core dependencies
+amulet-core>=1.9.0
+numpy>=1.21.0
+
+# Note: Java Runtime Environment (JRE) 8+ is required but must be installed separately
+# Note: ChunkyLauncher.jar must be downloaded from https://chunky-dev.github.io/docs/

@@ -1,0 +1,109 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.venv
+env/
+venv/
+ENV/
+
+# Distribution / packaging
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+share/python-wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Unit test / coverage reports
+htmlcov/
+.coverage
+.coverage.*
+.cache
+coverage.xml
+*.cover
+*.py,cover
+.pytest_cache/
+
+# ML-specific
+*.ckpt
+*.pth
+*.h5
+*.onnx
+wandb/
+lightning_logs/
+/data/*
+!/data/raw/.gitkeep
+!/data/processed/.gitkeep
+!/data/schematics/.gitkeep
+!/data/README.md
+/models/*
+!/models/.gitkeep
+/logs/*
+!/logs/.gitkeep
+
+# Minecraft/Schematic rendering specific
+data/schematics/*.schematic
+data/processed_schematics/
+data/planet_minecraft/
+data/previews_test/
+data/showcase_test/
+data/MNIST/
+data/logs/
+data/bluemap_screenshots/
+data/world_test_file/void/region/*.mca
+bluemap_test_world/region/*.mca
+.chunky/
+tools/bluemap/
+archive/
+
+# Generated renders (too large for git)
+*.png
+!docs/**/*.png
+
+# Web interface data
+web/maps/
+web/settings.json
+config/maps/*.conf
+
+# Hydra
+outputs/
+multirun/
+.hydra/
+
+# Jupyter
+.ipynb_checkpoints
+*/.ipynb_checkpoints/*
+
+# IDE
+.idea/
+.vscode/*
+!.vscode/settings.json
+!.vscode/launch.json
+*.swp
+*.swo
+
+# MacOS
+.DS_Store
+
+# mkdocs
+/site/
+
+# Environment
+.python-version
+poetry.lock
+pdm.lock

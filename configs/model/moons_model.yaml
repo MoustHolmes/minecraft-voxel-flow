@@ -1,0 +1,26 @@
+_target_: minecraft_voxel_flow.models.flow_matching.FlowMatching
+
+model: 
+  _target_: minecraft_voxel_flow.networks.mlp.MoonsNet
+  input_dim: 2
+  output_dim: 2
+  hidden_dim: 128
+  time_dim: 16
+  num_classes: 11
+
+alpha_beta_scheduler:
+  _target_: minecraft_voxel_flow.modules.schedulers.LinearScheduler
+  data_dim: 2  # 2D data for moons
+
+sampler:
+  _target_: minecraft_voxel_flow.modules.samplers.GaussianSampler
+  target_shape: [2]  # 2D data points
+
+ode_solver:
+  _target_: minecraft_voxel_flow.modules.solvers.EulerSolver
+
+optimizer:
+  _target_: torch.optim.Adam
+  _partial_: true
+  lr: 0.001
+  weight_decay: 0.0

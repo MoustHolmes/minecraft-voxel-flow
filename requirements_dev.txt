@@ -1,0 +1,16 @@
+# Development tools
+pytest>=8.0.0
+black>=23.9.1
+ruff>=0.2.2
+pre-commit>=3.5.0
+mkdocs-material>=9.5.0
+mkdocstrings[python]>=0.24.0
+invoke>=2.2.0
+mypy>=1.8.0
+nbqa>=1.7.1
+nbstripout>=0.7.1
+bandit[toml]>=1.7.7
+pytest-cov>=4.1.0
+types-PyYAML>=6.0.12
+types-requests>=2.31.0
+types-setuptools>=69.0.0

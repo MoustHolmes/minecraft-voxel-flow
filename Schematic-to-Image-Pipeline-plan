@@ -1,0 +1,912 @@
+# Schematic-to-Image Pipeline Implementation Plan
+
+## Implementation Checklist
+
+### Phase 1: Environment Setup
+- [x] Install Chunky and ChunkyLauncher.jar
+  - [ ] Download ChunkyLauncher.jar to `tools/chunky/` (MANUAL STEP REQUIRED)
+  - [ ] Run `java -jar ChunkyLauncher.jar --update` (See setup script)
+  - [ ] Download Minecraft assets: `java -jar ChunkyLauncher.jar -download-mc 1.20.4` (See setup script)
+- [x] Verify Python dependencies
+  - [x] Confirm amulet-core is installed
+  - [x] Confirm numpy is installed
+  - [x] Test amulet-core import and basic functions
+
+### Phase 2: Core Module Development ✅ COMPLETE
+- [x] Create `src/minecraft_voxel_flow/rendering/` module directory
+- [x] Implement Amulet helper functions (`amulet_helpers.py`)
+  - [x] `create_void_world()` - Create empty Anvil world
+  - [x] `load_schematic()` - Load .schem files
+  - [x] `get_schematic_bounds()` - Extract bounding box
+  - [x] `paste_and_save()` - Place schematic in world
+- [x] Implement camera calculation (`camera_calculator.py`)
+  - [x] `calculate_camera_parameters()` - Compute position/orientation
+  - [x] Define standard isometric view vectors
+  - [x] Handle edge cases (single blocks, very large structures)
+- [x] Implement Chunky interface (`chunky_renderer.py`)
+  - [x] `generate_scene_file()` - Create scene.json
+  - [x] `render_scene_with_chunky()` - Execute rendering
+  - [x] Error handling and logging
+
+### Phase 3: Pipeline Integration ✅ COMPLETE
+- [x] Create main pipeline script (`scripts/render_pipeline.py`)
+  - [x] Command-line argument parsing
+  - [x] Directory structure setup
+  - [x] Parallel processing with ProcessPoolExecutor
+  - [x] Progress tracking and logging
+- [x] Implement `process_schematic()` worker function
+  - [x] Load and stage schematic
+  - [x] Generate camera parameters for each view
+  - [x] Render all views
+  - [x] Handle cleanup
+
+### Phase 4: Testing & Validation
+- [x] Create test script with single schematic
+- [x] Verify Anvil world creation
+- [x] Verify scene.json generation
+- [x] Chunky setup complete (downloaded and installed)
+- [ ] Test Chunky rendering (single image) - **BLOCKED: Chunky "dump file" error**
+- [ ] Test multi-view rendering (4 isometric angles) - **BLOCKED: Chunky issue**
+- [ ] Test parallel processing (multiple schematics) - **BLOCKED: Chunky issue**
+- [ ] Validate output image quality and framing - **BLOCKED: Chunky issue**
+
+### Phase 5: Documentation & Optimization
+- [x] Create requirements.txt for pipeline
+- [x] Write usage documentation (docs/CHUNKY_RENDERING_SETUP.md)
+- [x] Add setup script (scripts/setup_chunky_pipeline.sh)
+- [ ] Add error recovery mechanisms
+- [ ] Optimize for large-scale processing
+- [ ] Add progress bars and ETA estimates
+
+## Implementation Notes
+
+### ✅ Completed Implementation Changes:
+1. **World Format**: Using Anvil world format instead of .construction
+   - Reason: Chunky works better with standard Minecraft worlds
+   - `create_void_world()` creates AnvilFormat worlds
+   
+2. **SelectionBox API**: Fixed attribute access
+   - Use `size_x`, `size_y`, `size_z` instead of `.size`
+   - Wrap SelectionBox in SelectionGroup for paste operations
+
+3. **World Loading Pattern**: Two-step process
+   - Create world with format wrapper
+   - Close and reload with `amulet.load_level()` for paste operations
+   - This is required because format wrappers don't have paste method
+
+4. **Module Structure**: Created proper Python package
+   - `src/minecraft_voxel_flow/rendering/` module
+   - Separate files for amulet, camera, and chunky functions
+   - Clean imports in `__init__.py`
+
+### ⚠️ Known Issues Resolved:
+- [x] Amulet .construction format compatibility → **FIXED: Using Anvil format**
+- [x] SelectionBox.size attribute error → **FIXED: Use size_x, size_y, size_z**
+- [x] Format wrapper paste method → **FIXED: Use amulet.load_level() after creation**
+- [x] SelectionGroup wrapping → **FIXED: Wrap SelectionBox in SelectionGroup**
+
+### 🔧 Next Steps for Full Functionality:
+1. **✅ Chunky Setup Complete**:
+   - ChunkyLauncher.jar downloaded
+   - Chunky 2.4.6 installed
+   - Minecraft 1.20.4 assets downloaded
+
+2. **⚠️ Known Issue - Chunky "dump file" Error**:
+   ```
+   Error: "Failed to load the dump file found for this scene"
+   ```
+   
+   **What's Working**:
+   - ✅ World creation from schematics
+   - ✅ Scene.json generation with correct camera parameters
+   - ✅ All Amulet operations
+   
+   **What's Blocked**:
+   - ❌ Actual Chunky rendering (-snapshot command fails)
+   
+   **Possible Solutions to Try**:
+   - Try different Chunky version (2.4.5 or 2.5.0-alpha)
+   - Use `-render` instead of `-snapshot` and extract frames manually
+   - Build octree files separately before rendering
+   - Check Chunky GitHub issues for similar problems
+   - Try alternative: Use Chunky GUI to manually load scene.json
+
+3. **Test Rendering** (once Chunky issue resolved):
+   ```bash
+   # Test with single schematic (full render)
+   python scripts/test_render_pipeline.py data/schematics/10234.schematic
+   
+   # Run on a small batch
+   python scripts/render_pipeline.py \
+     --input_dir data/schematics \
+     --output_dir data/rendered_images \
+     --limit 5
+   ```
+
+3. **Production Run**:
+   ```bash
+   # Process all schematics
+   python scripts/render_pipeline.py \
+     --input_dir data/schematics \
+     --output_dir data/rendered_images \
+     --workers 4 \
+     --spp 256
+   ```
+
+### Implementation Deviations from Original Plan:
+- ✅ Using Anvil world format instead of .construction (better Chunky compatibility)
+- ✅ Two-step world creation process (create then reload)
+- ✅ SelectionGroup wrapping for paste operations
+- ⚠️ Cannot test rendering without Chunky download (manual step required)
+
+---
+
+## Original Document
+
+I. Architectural Blueprint for an Automated Schematic-to-Image Pipeline
+
+The successful development of a generative model, such as the proposed flow-matching network, is fundamentally predicated on the quality, consistency, and domain-relevance of its training dataset. This report outlines a comprehensive architectural plan for a fully-automated, scriptable pipeline designed to produce such a dataset. The pipeline's core function is to systematically convert a corpus of 3D Minecraft schematics into a corresponding set of 2D rendered images, thereby creating the paired data necessary for supervised learning. The architecture prioritizes headless operation, deterministic output, and high-fidelity rendering to ensure the generated images are a valid representation of the in-game visual domain.
+
+1.1. High-Level Pipeline Overview
+
+The pipeline is conceived as a sequential, multi-stage process that transforms raw schematic files into a structured, model-ready dataset. Each stage is designed to be a modular, scriptable component, allowing for robust automation and error handling. The conceptual data flow is as follows:
+
+    Ingestion: The pipeline begins by traversing a specified input directory to identify all available Minecraft schematic files (e.g., .schem, .litematic, .construction).
+
+    Staging: For each schematic, a temporary, sterile 3D environment is programmatically created. The schematic is then loaded and precisely placed within this environment. This stage is critical for isolating the subject structure and eliminating any potential visual confounders.
+
+    Camera Calculation: The geometric properties of the staged schematic, specifically its three-dimensional bounding box, are extracted. An algorithm then uses these dimensions to calculate the optimal camera position, orientation, and field of view required to frame the entire structure within the viewport.
+
+    Rendering: A headless rendering engine is invoked with the staged environment and the calculated camera parameters. It generates a high-fidelity 2D image of the structure from the specified viewpoint. This process is executed without any graphical user interface (GUI), making it suitable for server-based execution.
+
+    Output & Association: The final rendered image is saved to an output directory. A strict naming convention is enforced to maintain a clear and unambiguous link between each output image and its source schematic file, finalizing the data pair.
+
+This entire process is designed to be executed via a single master script, ensuring repeatability and scalability across thousands of input schematics.
+
+1.2. Critical Analysis of Architectural Strategies
+
+Two primary architectural strategies present themselves for the rendering stage of this pipeline, each with distinct toolchains and trade-offs. The selection of a strategy has profound implications for the final dataset's quality and its suitability for the machine learning objective.
+
+Strategy A: The Direct Rendering Pipeline
+
+This strategy employs a rendering engine specifically designed for Minecraft worlds. The schematic is first placed into a temporary Minecraft world file, which is then rendered directly. This approach ensures that the visual output—including lighting, texture mapping, and block model interpretation—is as close as possible to the ground truth of the Minecraft game engine.
+
+    Toolchain Example:
+
+        Staging: Amulet-Core. A powerful Python library for programmatically reading, writing, and manipulating Minecraft world data across different versions and formats. It will be used to create the temporary world and paste the schematic.
+
+        Rendering: Chunky. A high-performance, open-source path tracer for Minecraft worlds. Crucially, Chunky supports a headless, command-line rendering mode, making it ideal for automation. It reads Minecraft world folders directly and can produce photorealistic images.   
+
+Strategy B: The Intermediate Model Pipeline
+
+This strategy decouples the process by first converting the Minecraft schematic into a standard 3D model format (e.g., Wavefront .obj, Universal Scene Description .usd) and then rendering this intermediate file using a general-purpose 3D graphics suite.
+
+    Toolchain Example:
+
+        Staging & Export: Mineways. A specialized tool for exporting sections of Minecraft worlds into various 3D file formats. It features a comprehensive scripting interface that allows for the automation of world loading, region selection, and model exportation.   
+
+Rendering: Blender. A professional, open-source 3D creation suite with a powerful Python API (bpy) that allows for complete control over scene setup, camera placement, and rendering in a headless environment. Libraries like blenderless can further simplify this automation process.  
+
+1.3. Tool Comparison and Recommended Architecture
+
+The decision between these strategies hinges on a trade-off between rendering flexibility and domain fidelity. While the Intermediate Model Pipeline offers unparalleled control over every aspect of the rendering process through Blender's API, the Direct Rendering Pipeline provides an output that is intrinsically more faithful to the target domain of Minecraft. A detailed comparison of the candidate tools clarifies the optimal choice.
+
+Table 1: Comparative Analysis of Rendering Toolchains
+Criterion	Chunky (Direct)	Mineways + Blender (Intermediate)	BlueMap	Overviewer
+Headless Operation	
+
+Excellent (Native CLI)
+	
+
+Excellent (Python API/CLI)
+	
+
+Yes (CLI Tool)
+	
+
+Yes (CLI Tool)
+Scripting API Quality	
+
+Good (Via scene.json config)
+	
+
+Excellent (Full Python API)
+	
+
+Limited (Configuration-based)
+	
+
+Limited (Configuration-based)
+Camera Control Granularity	
+
+Excellent (Via scene.json)
+	
+
+Excellent (Full Python API)
+	
+
+Poor (Designed for map views)
+	
+
+Poor (Designed for map views)
+Output Fidelity (vs. In-Game)	Highest (Minecraft-specific path tracer)	Medium-High (Requires careful tuning)	
+
+High (3D model-based)
+	
+
+Medium (Isometric tile-based)
+Implementation Complexity	Low-Medium	High	Medium	Medium
+Dependency Footprint	Java, Chunky Launcher	Python, Blender, Mineways	Java, BlueMap CLI	
+
+Python, Numpy, PIL
+ 
+
+As the table illustrates, tools like BlueMap and Overviewer are ill-suited for this project. They are designed as large-scale world mappers, generating interactive web maps from a top-down or isometric perspective. Their camera systems are not designed for the precise framing of individual, arbitrarily-sized structures, which is a core requirement of this pipeline.  
+
+The choice between the Chunky and Blender pipelines is more nuanced. However, the ultimate goal of the project—training a model to generate content for Minecraft—provides a decisive factor. The visual characteristics of the Minecraft engine, including its specific lighting model, block textures, and rendering quirks, constitute the "ground truth" domain. The Chunky path tracer is explicitly designed to emulate this domain with high fidelity. While Blender is a powerful renderer, achieving a perfect match with Minecraft's aesthetic would require extensive and complex material and lighting setup. Any deviation, however subtle, introduces a "domain gap" between the training data and the target application. This gap could significantly impair the generative model's ability to produce schematics that look correct when rendered in-game.  
+
+Therefore, the Direct Rendering Pipeline, utilizing Amulet-Core for staging and Chunky for rendering, is the unequivocally recommended architecture. This approach minimizes the domain gap, thereby maximizing the utility and effectiveness of the generated dataset for the specified machine learning task. It strikes the optimal balance between automation capability, control, and, most importantly, domain-specific visual fidelity.
+
+II. Foundational Schematic Processing with Amulet-Core
+
+The backbone of the data preparation pipeline is the amulet-core library. Its comprehensive, version-agnostic API for manipulating Minecraft world data provides the necessary tools to programmatically load, place, and manage schematics in a controlled environment. This section details the methodology for using amulet-core to handle the initial stages of the pipeline: creating a sterile staging world, ingesting schematics, and positioning them for rendering.
+
+2.1. Introduction to the Amulet Ecosystem
+
+Amulet is not a monolithic application but a suite of interconnected Python libraries, each with a specific purpose. The pipeline will primarily interface with Amulet-Core, the central library for world data manipulation. Amulet's power stems from its internal "superset format," a proprietary, temporary data structure into which all world data is converted upon loading. This abstraction layer allows the same set of programmatic operations to be applied to any supported Minecraft version or platform (Java, Bedrock), making the pipeline robust and future-proof.  
+
+2.2. Creating a Sterile Staging Environment: The "Void World"
+
+To ensure that each rendered image contains only the target schematic and nothing else, it is essential to place the structure in a completely empty world—a "void world." This eliminates background terrain, extraneous structures, and inconsistent global lighting that could act as confounding variables for the machine learning model.
+
+A robust pipeline design dictates that a new, pristine void world should be created for each schematic being processed. This approach treats each data point's generation as an independent, stateless operation, preventing any risk of data contamination from previous runs (e.g., leftover chunks from a larger schematic). This stateless, per-schematic methodology is also inherently friendly to parallel processing, as each rendering job is entirely self-contained.
+
+The Amulet API directly facilitates this pattern through its support for the .construction format, a lightweight file format designed for storing selections of Minecraft chunk data. A temporary .construction file can serve as our void world. The following Python function demonstrates how to programmatically create one.  
+
+Python
+
+import amulet
+import os
+from amulet.api.selection import SelectionGroup, SelectionBox
+
+def create_void_world(path: str, platform: str = "java", version: tuple = (1, 20, 4)) -> amulet.api.level.World:
+    """
+    Creates a new, empty Amulet world object backed by a.construction file.
+
+    Args:
+        path (str): The file path where the.construction file will be created.
+        platform (str): The target Minecraft platform (e.g., "java").
+        version (tuple): The target Minecraft version tuple (e.g., (1, 20, 4)).
+
+    Returns:
+        amulet.api.level.World: The newly created, empty world object.
+    """
+    # Ensure the parent directory exists
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+
+    # Get a format wrapper for the construction format
+    wrapper = amulet.load_format(path)
+
+    # Check if a file already exists and handle it
+    if wrapper.exists:
+        # For a truly sterile environment, it's best to ensure the path is clear,
+        # but for this function, we'll rely on the overwrite flag.
+        pass
+
+    # Create and open the new world file.
+    # The bounds can be minimal as the world will expand when chunks are added.
+    initial_bounds = SelectionGroup()
+    wrapper.create_and_open(platform, version, initial_bounds, overwrite=True)
+    
+    # The wrapper is now an open world object
+    return wrapper
+
+This function utilizes amulet.load_format() to get a ConstructionFormatWrapper instance for the specified path. The key operation is the call to .create_and_open(), which initializes the file on disk with the specified platform and version metadata, ready to accept chunk data. The overwrite=True parameter ensures that any pre-existing file at that path is replaced, guaranteeing a sterile environment for each run.  
+
+2.3. Schematic Ingestion and Bounding Box Extraction
+
+With a staging environment ready, the next step is to load the input schematic and determine its physical dimensions. This information is crucial for both placing the structure correctly and calculating the camera position.
+
+Loading Schematics
+
+Amulet's amulet.load_level() function provides a unified interface for loading various Minecraft data formats, including .schem files. It returns a Structure object, which is a subclass of BaseLevel and represents a non-world-aligned collection of chunk data.  
+
+Python
+
+import amulet
+from amulet.api.level import Structure
+
+def load_schematic(path: str) -> Structure:
+    """
+    Loads a schematic file into an Amulet Structure object.
+
+    Args:
+        path (str): The file path to the.schem file.
+
+    Returns:
+        Structure: The loaded schematic as an Amulet Structure object.
+    """
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Schematic file not found at: {path}")
+    
+    level = amulet.load_level(path)
+    return level
+
+Extracting the Bounding Box
+
+The bounding box is the single most important piece of metadata we can extract from the schematic. It defines the structure's extents and provides the basis for all subsequent placement and camera calculations. The bounds() method of a BaseLevel object returns this information as a SelectionGroup object, which contains one or more SelectionBox objects. For standard schematics, this group typically contains a single box.  
+
+Python
+
+from amulet.api.selection import SelectionGroup, SelectionBox
+
+def get_schematic_bounds(schematic: Structure) -> SelectionBox:
+    """
+    Extracts the primary bounding box from a loaded schematic.
+
+    Args:
+        schematic (Structure): The Amulet Structure object.
+
+    Returns:
+        SelectionBox: The bounding box of the structure.
+    """
+    if not schematic.dimensions:
+        raise ValueError("Schematic does not contain any dimensions.")
+        
+    # Get the selection group for the primary dimension
+    selection_group = schematic.bounds(schematic.dimensions)
+    
+    if not selection_group.selection_boxes:
+        raise ValueError("Schematic bounding box is empty.")
+        
+    # For simplicity, we assume a single bounding box, which is common for schematics.
+    # A more robust implementation might merge multiple boxes if present.
+    return selection_group.selection_boxes
+
+# Example Usage:
+# schematic = load_schematic("path/to/my_build.schem")
+# bounds = get_schematic_bounds(schematic)
+# min_point = bounds.min # (min_x, min_y, min_z)
+# max_point = bounds.max # (max_x, max_y, max_z)
+# size = bounds.size    # (size_x, size_y, size_z)
+
+The SelectionBox object conveniently provides the minimum and maximum corner coordinates (.min, .max) as well as the dimensions (.size) of the structure.  
+
+2.4. Pasting Structures into the Staging World
+
+The final step in the Amulet-based processing is to paste the loaded schematic into the void world. The goal is to place it at a consistent, normalized position. A common convention is to center the structure's footprint at the world origin (x=0, z=0).
+
+The world.paste() method is the primary tool for this operation. It is a highly flexible function that copies a selection from a source level to a target level, with options for translation, rotation, and scaling. A practical example of its usage can be found in a script from an Amulet-Core GitHub issue, which demonstrates pasting a schematic with rotation.  
+
+The following function encapsulates the logic for centering and pasting the schematic.
+Python
+
+from amulet.api.level import World, Structure
+from amulet.api.selection import SelectionBox
+
+def paste_and_save(world: World, schematic: Structure, bounds: SelectionBox):
+    """
+    Pastes a schematic into a world, centered at the origin, and saves the world.
+
+    Args:
+        world (World): The target world object (e.g., the void world).
+        schematic (Structure): The source schematic object.
+        bounds (SelectionBox): The bounding box of the schematic.
+    """
+    # Calculate the center of the schematic's base
+    center_x = bounds.min_x + bounds.size_x // 2
+    center_z = bounds.min_z + bounds.size_z // 2
+
+    # Calculate the target location to center the schematic at (0, y, 0)
+    # The y-coordinate is kept as is, so the structure isn't moved vertically.
+    target_location = (-center_x, bounds.min_y, -center_z)
+
+    # Perform the paste operation
+    world.paste(
+        source_level=schematic,
+        source_dimension=schematic.dimensions,
+        source_selection=bounds,
+        target_dimension=world.dimensions, # Assumes 'minecraft:overworld' or similar
+        target_location=target_location,
+        scale=(1.0, 1.0, 1.0), # No scaling
+        rotation=(0.0, 0.0, 0.0)  # No rotation
+    )
+
+    # Save changes to disk and close the world
+    world.save()
+    world.close()
+
+This function calculates the necessary offset to align the schematic's center with the world origin and provides these parameters to world.paste(). Critically, it concludes by calling world.save() and world.close(). These calls are essential to flush all changes from memory to the underlying .construction file on disk, making it ready for the next stage of the pipeline: rendering.  
+
+III. Headless Scene Rendering and Image Capture with Chunky
+
+Once a schematic has been staged in its own temporary .construction world file, the pipeline transitions to the rendering phase. The recommended tool, Chunky, is a path tracer designed specifically for Minecraft, capable of producing high-quality, aesthetically accurate images. Its support for headless, command-line operation is the key feature that enables its integration into a fully automated script.
+
+3.1. Setting Up Chunky for Headless Operation
+
+Before rendering can be scripted, the Chunky environment must be properly configured. This involves using the ChunkyLauncher.jar file, which serves as the primary command-line interface for managing the Chunky application itself.
+
+The initial setup requires two main steps, which can be executed from a terminal :  
+
+    Update Chunky: Ensure the latest version of the Chunky renderer is downloaded.
+    Bash
+
+java -jar ChunkyLauncher.jar --update
+
+Download Minecraft Assets: Chunky requires the assets (textures, block models) from a specific Minecraft version to render worlds correctly. This command downloads and installs the necessary files for a given version. The version chosen should match the version specified when creating the void world with Amulet.
+Bash
+
+    java -jar ChunkyLauncher.jar -download-mc 1.20.4
+
+These commands only need to be run once to set up the environment. The launcher will store the downloaded files in a settings directory (typically in the user's home directory), where they will be automatically located during subsequent rendering tasks.  
+
+3.2. Programmatic Control via scene.json
+
+The most robust and scalable method for automating Chunky is not by passing a long list of command-line arguments, but by programmatically generating its scene configuration files. Every Chunky scene is defined by a scene.json file located within a uniquely named sub-directory inside the scenes folder. By creating these files on-the-fly, a master script can exert complete and explicit control over every aspect of the render.
+
+This "configuration-as-code" approach is superior to managing command-line flags because it is more readable, less error-prone, and decouples the logic for determining render parameters from the mechanism of executing the render. The Python script will assemble a dictionary of all required settings, serialize it to JSON, and write it to a temporary scene directory.
+
+The scene.json Format
+
+The scene.json file is a comprehensive specification of the render job. For the purposes of this pipeline, several key parameters are of critical importance:  
+
+    name (string): The name of the scene.
+
+    width, height (integer): The dimensions of the output image in pixels.
+
+    sppTarget (integer): The "Samples Per Pixel" target. This directly controls the render quality and time; higher values produce less noisy images but take longer to render. A value of 1000 is a reasonable default.   
+
+world (object): An object specifying the path to the world to be rendered. For this pipeline, this will be the path to the temporary .construction file created by Amulet.
+
+camera (object): The most critical object for automation. It contains sub-keys that define the camera's state:
+
+    position (XYZ Object): The (x, y, z) coordinates of the camera.
+
+    orientation (Direction Object): The camera's rotation, defined by pitch and yaw. A more intuitive way to control this is by setting a target point.
+
+    projectionMode (string): The type of camera projection. "PINHOLE" is standard perspective, while "PARALLEL" provides an orthographic view.   
+
+        fov (number): The field of view in degrees.
+
+    sun (object): Controls the position and properties of the primary light source (the sun).
+
+    sky (object): Controls the appearance of the sky and background.
+
+The following Python function demonstrates how to generate a scene.json file from a dictionary of parameters.
+Python
+
+import json
+import os
+
+def generate_scene_file(scene_dir: str, world_path: str, camera_params: dict, width: int, height: int, spp: int):
+    """
+    Generates a scene.json file for a Chunky render.
+
+    Args:
+        scene_dir (str): Path to the scene directory (e.g., 'temp_scenes/my_render').
+        world_path (str): Path to the.construction world file.
+        camera_params (dict): Dictionary containing camera settings.
+        width (int): Output image width.
+        height (int): Output image height.
+        spp (int): Samples Per Pixel target.
+    """
+    scene_name = os.path.basename(scene_dir)
+    
+    # A simplified but functional scene configuration
+    scene_data = {
+        "sdfVersion": 9,
+        "name": scene_name,
+        "width": width,
+        "height": height,
+        "sppTarget": spp,
+        "camera": {
+            "name": "camera 1",
+            "projectionMode": "PINHOLE", # Or "PARALLEL" for orthographic
+            "fov": 70.0,
+            # These will be populated from camera_params
+            "position": camera_params.get("position"),
+            "orientation": camera_params.get("orientation")
+        },
+        "sun": {
+            "azimuth": 225.0, # Angle from North
+            "altitude": 45.0, # Angle from horizon
+            "intensity": 1.0
+        },
+        "world": {
+            "path": os.path.abspath(world_path)
+        },
+        "transparentSky": True, # Render with a transparent background
+        "renderActors": False, # Do not render player models or other actors
+        "dumpFrequency": 500
+    }
+    
+    os.makedirs(scene_dir, exist_ok=True)
+    scene_file_path = os.path.join(scene_dir, "scene.json")
+    
+    with open(scene_file_path, 'w') as f:
+        json.dump(scene_data, f, indent=4)
+
+3.3. Orchestrating the Render from Python
+
+With the ability to generate scene files, the final step is to invoke the Chunky renderer from the master Python script. This is achieved using Python's built-in subprocess module, which can execute external commands.
+
+The primary command for headless rendering is -render <SceneName>, where <SceneName> is the name of the directory created in the scenes folder. An even more direct command is -snapshot <SceneName> <OutputFile>, which performs the render and immediately saves the final image to a specified path, streamlining the workflow.  
+
+Python
+
+import subprocess
+import sys
+
+def render_scene_with_chunky(chunky_launcher_path: str, scene_dir: str, output_image_path: str, threads: int = 4):
+    """
+    Invokes Chunky to render a scene headlessly.
+
+    Args:
+        chunky_launcher_path (str): Path to ChunkyLauncher.jar.
+        scene_dir (str): Path to the scene directory.
+        output_image_path (str): Path to save the final PNG image.
+        threads (int): Number of render threads to use.
+    """
+    scene_name = os.path.basename(scene_dir)
+    chunky_settings_dir = os.path.dirname(os.path.dirname(scene_dir)) # Assumes scene_dir is inside 'scenes'
+
+    command =
+    
+    print(f"Executing Chunky render: {' '.join(command)}")
+    
+    try:
+        # Execute the command, capturing output
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        print("Chunky render completed successfully.")
+        print(result.stdout)
+    except subprocess.CalledProcessError as e:
+        print(f"Chunky render failed with exit code {e.returncode}.", file=sys.stderr)
+        print(f"Stdout: {e.stdout}", file=sys.stderr)
+        print(f"Stderr: {e.stderr}", file=sys.stderr)
+        raise
+
+This function constructs the full command-line instruction to run Chunky. It specifies the scene to render and the desired output file path. The -threads flag is included for performance tuning. The function also includes robust error handling to capture and report any issues during the rendering process. For added flexibility, the -texture <FILE> argument could be incorporated to apply custom resource packs, allowing for the generation of datasets with varied visual styles from the same set of schematics.  
+
+IV. Algorithmic Camera Placement for Standardized Imagery
+
+The most complex challenge in this pipeline is automating camera placement. For a machine learning dataset, it is imperative that each structure is framed consistently and clearly, regardless of its size or shape. A manually positioned camera is not scalable or repeatable. Therefore, an algorithm is required that can take a structure's bounding box as input and deterministically compute the ideal camera parameters to capture it.
+
+4.1. The Case for Isometric Projection
+
+While perspective projection mimics human vision, it introduces distortions where objects farther away appear smaller. For a model learning geometry, this can be a confounding factor. An isometric projection, a form of parallel projection, eliminates this distortion. All parallel lines in the 3D scene remain parallel in the 2D image, and objects retain their size regardless of their distance from the camera. This provides a "cleaner," more direct representation of the structure's geometry, which is highly advantageous for training a neural network.
+
+Furthermore, an isometric viewpoint offers natural opportunities for data augmentation. By rendering each schematic from the four primary isometric angles (e.g., looking from the southeast, southwest, northeast, and northwest), the dataset can be quadrupled in size, teaching the model rotational invariance without requiring additional schematic assets.
+
+4.2. The Bounding Box to Camera Vector Algorithm
+
+The core of the camera placement algorithm is to position the camera along a desired viewing vector (e.g., an isometric angle) at a sufficient distance to ensure the entire schematic fits within the camera's viewing frustum. This problem is common in 3D graphics, and libraries like pyvista offer functions such as Plotter.view_isometric(bounds=...) that solve it directly, providing a conceptual model for our implementation.  
+
+The algorithm can be implemented by simplifying the problem: we calculate the radius of a sphere that perfectly encloses the schematic's bounding box. Then, using basic trigonometry, we determine how far the camera must be from the center of this sphere for it to be fully visible given the camera's field of view (FOV).
+
+The steps for the Python implementation are as follows:
+
+    Input: The schematic's bounding box (providing min_point and max_point), a desired camera field of view (e.g., 70 degrees), and the output image's aspect ratio.
+
+    Calculate Bounding Box Properties: Compute the center point of the box (center = (min_point + max_point) / 2) and its diagonal size vector (size = max_point - min_point).
+
+    Determine Bounding Sphere Radius: The radius of the sphere that encloses the box is half the length of its longest diagonal. A simpler, more conservative estimate is half the length of the main space diagonal: radius = np.linalg.norm(size) / 2.0.
+
+    Calculate Required Camera Distance: The relationship between the camera's FOV, the object's radius, and the required distance forms a right-angled triangle. The distance D from the camera to the object's center can be calculated as: D=sin(2fov​)radius​. An additional factor must be included to account for the image aspect ratio to ensure the object fits both vertically and horizontally.
+
+    Define Isometric View Vectors: The four cardinal isometric views correspond to vectors pointing from the corners of a cube towards its center. In Minecraft's coordinate system (Y-up), these can be represented as normalized vectors. For example, a standard isometric view might be (-1, -1, -1).
+
+    Calculate Final Camera Position: The camera's final position (eye) is found by starting at the bounding box's center and moving backward along the chosen view vector by the calculated distance D: eye = center - normalize(view_vector) * D.
+
+    Determine Camera Orientation: Instead of calculating complex pitch and yaw angles, it is simpler to define the camera's orientation with a "look-at" target. The target is simply the center of the bounding box. An "up" vector, typically (0, 1, 0) in Minecraft, defines the camera's vertical orientation.
+
+The following Python function implements this logic:
+Python
+
+import numpy as np
+import math
+
+def calculate_camera_parameters(bounds: SelectionBox, view_vector: tuple, fov_degrees: float = 70.0, aspect_ratio: float = 1.0) -> dict:
+    """
+    Calculates camera position and orientation to frame a bounding box from an isometric angle.
+
+    Args:
+        bounds (SelectionBox): The bounding box of the object.
+        view_vector (tuple): The direction vector for the camera view (e.g., (-1, -0.8, -1)).
+        fov_degrees (float): The camera's vertical field of view in degrees.
+        aspect_ratio (float): The width/height aspect ratio of the output image.
+
+    Returns:
+        dict: A dictionary containing 'position' and 'orientation' for scene.json.
+    """
+    center = np.array(bounds.min) + np.array(bounds.size) / 2.0
+    size = np.array(bounds.size)
+    
+    # Calculate the radius of the bounding sphere
+    radius = np.linalg.norm(size) / 2.0
+    if radius == 0: radius = 1.0 # Avoid division by zero for single blocks
+
+    # Convert FOV to radians for trigonometry
+    fov_rad = math.radians(fov_degrees)
+    
+    # Adjust for aspect ratio to ensure the object fits in the wider dimension
+    effective_fov = fov_rad
+    if aspect_ratio > 1: # Landscape
+        effective_fov = 2 * math.atan(math.tan(fov_rad / 2) * aspect_ratio)
+
+    # Calculate the required distance from the center
+    distance = radius / math.sin(effective_fov / 2)
+    distance *= 1.1 # Add a small margin
+
+    # Normalize the view vector and calculate camera position
+    view_vector_norm = np.array(view_vector) / np.linalg.norm(view_vector)
+    position = center - (view_vector_norm * distance)
+
+    # Calculate yaw and pitch for Chunky's orientation format
+    # Yaw is rotation around Y-axis (from positive Z)
+    # Pitch is rotation around X-axis (up/down)
+    dx, dy, dz = -view_vector_norm
+    yaw = math.degrees(math.atan2(dx, dz))
+    pitch = math.degrees(math.atan2(-dy, math.sqrt(dx**2 + dz**2)))
+
+    return {
+        "position": {"x": position, "y": position, "z": position},
+        "orientation": {"pitch": pitch, "yaw": yaw}
+    }
+
+4.3. Data Augmentation via Multi-View Rendering
+
+The camera calculation algorithm can be easily extended to generate multiple images per schematic, providing valuable data augmentation. By defining a set of standard isometric view vectors, the main processing loop can iterate through them, generating a unique, consistently framed image for each.
+Python
+
+# Define the four cardinal isometric view vectors
+# (Adjust y-component to get a pleasing angle, e.g., 35.264 degrees pitch)
+ISOMETRIC_VECTORS =
+
+# In the main loop:
+# for i, view_vec in enumerate(ISOMETRIC_VECTORS):
+#     camera_params = calculate_camera_parameters(bounds, view_vec,...)
+#     output_path = f"schematic_name_iso_{i}.png"
+#     #... proceed with rendering...
+
+This strategy effectively multiplies the size of the training dataset by the number of views rendered, enhancing the model's ability to understand 3D geometry from different angles without requiring any additional source data.
+
+V. The Complete Pipeline: Integration and Execution
+
+This section synthesizes the components detailed previously—schematic processing with Amulet, headless rendering with Chunky, and algorithmic camera placement—into a single, cohesive, and executable master script. This script represents the final, operational pipeline.
+
+5.1. Final Directory Structure
+
+A well-organized directory structure is essential for managing the pipeline's inputs, outputs, and temporary files. The following structure is recommended:
+
+/project_root/
+|
+|-- schematics_in/          # Input directory containing source.schem files
+| |-- building1.schem
+| +-- castle.schem
+|
+|-- images_out/             # Output directory for generated PNG images
+|
+|-- temp/                   # Directory for transient files (can be auto-deleted)
+| |-- worlds/             # Temporary.construction worlds
+| +-- scenes/             # Temporary Chunky scene.json files
+|
+|-- pipeline.py             # The master Python script
+|
++-- ChunkyLauncher.jar      # The Chunky launcher executable
+
+This organization separates persistent data (inputs, outputs) from transient data (temporary files), simplifying execution and cleanup.
+
+5.2. The Master Python Script (pipeline.py)
+
+The following script integrates all the functions and logic developed in the preceding sections. It uses Python's argparse for command-line configuration and concurrent.futures for parallel processing, enabling it to efficiently process a large number of schematics.
+Python
+
+# pipeline.py
+import os
+import sys
+import shutil
+import glob
+import json
+import subprocess
+import argparse
+import uuid
+import math
+import numpy as np
+from concurrent.futures import ProcessPoolExecutor, as_completed
+
+import amulet
+from amulet.api.level import World, Structure
+from amulet.api.selection import SelectionGroup, SelectionBox
+
+# --- Amulet Functions (from Section II) ---
+
+def create_void_world(path: str, platform: str = "java", version: tuple = (1, 20, 4)) -> World:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    wrapper = amulet.load_format(path)
+    initial_bounds = SelectionGroup()
+    wrapper.create_and_open(platform, version, initial_bounds, overwrite=True)
+    return wrapper
+
+def load_schematic(path: str) -> Structure:
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"Schematic file not found at: {path}")
+    return amulet.load_level(path)
+
+def get_schematic_bounds(schematic: Structure) -> SelectionBox:
+    if not schematic.dimensions:
+        raise ValueError("Schematic does not contain any dimensions.")
+    selection_group = schematic.bounds(schematic.dimensions)
+    if not selection_group.selection_boxes:
+        raise ValueError("Schematic bounding box is empty.")
+    return selection_group.selection_boxes
+
+def paste_and_save(world: World, schematic: Structure, bounds: SelectionBox):
+    center_x = bounds.min_x + bounds.size_x // 2
+    center_z = bounds.min_z + bounds.size_z // 2
+    target_location = (-center_x, bounds.min_y, -center_z)
+    world.paste(
+        source_level=schematic, source_dimension=schematic.dimensions,
+        source_selection=bounds, target_dimension=world.dimensions,
+        target_location=target_location
+    )
+    world.save()
+    world.close()
+
+# --- Camera Calculation Function (from Section IV) ---
+
+def calculate_camera_parameters(bounds: SelectionBox, view_vector: tuple, fov_degrees: float, aspect_ratio: float) -> dict:
+    center = np.array(bounds.min) + np.array(bounds.size) / 2.0
+    size = np.array(bounds.size)
+    radius = np.linalg.norm(size) / 2.0
+    if radius < 1.0: radius = 1.0
+    fov_rad = math.radians(fov_degrees)
+    effective_fov = 2 * math.atan(math.tan(fov_rad / 2) * max(1.0, aspect_ratio))
+    distance = (radius / math.sin(effective_fov / 2)) * 1.1
+    view_vector_norm = np.array(view_vector) / np.linalg.norm(view_vector)
+    position = center - (view_vector_norm * distance)
+    dx, dy, dz = -view_vector_norm
+    yaw = math.degrees(math.atan2(dx, dz))
+    pitch = math.degrees(math.atan2(-dy, math.sqrt(dx**2 + dz**2)))
+    return {"position": {"x": position, "y": position, "z": position}, "orientation": {"pitch": pitch, "yaw": yaw}}
+
+# --- Chunky Functions (from Section III) ---
+
+def generate_scene_file(scene_dir: str, world_path: str, camera_params: dict, width: int, height: int, spp: int):
+    scene_name = os.path.basename(scene_dir)
+    scene_data = {
+        "name": scene_name, "width": width, "height": height, "sppTarget": spp,
+        "camera": {"name": "camera", "projectionMode": "PINHOLE", "fov": 70.0, **camera_params},
+        "sun": {"azimuth": 225.0, "altitude": 45.0, "intensity": 1.0},
+        "world": {"path": os.path.abspath(world_path)},
+        "transparentSky": True, "renderActors": False, "dumpFrequency": spp + 1
+    }
+    os.makedirs(scene_dir, exist_ok=True)
+    with open(os.path.join(scene_dir, "scene.json"), 'w') as f:
+        json.dump(scene_data, f, indent=4)
+
+def render_scene_with_chunky(launcher_path: str, scene_dir: str, output_path: str, threads: int):
+    scene_name = os.path.basename(scene_dir)
+    settings_dir = os.path.dirname(os.path.dirname(scene_dir))
+    command =
+    try:
+        subprocess.run(command, check=True, capture_output=True, text=True)
+    except subprocess.CalledProcessError as e:
+        print(f"Chunky render failed for {scene_name}: {e.stderr}", file=sys.stderr)
+        raise
+
+# --- Main Processing Function ---
+
+def process_schematic(schematic_path, args):
+    """Worker function to process a single schematic file."""
+    schematic_name = os.path.splitext(os.path.basename(schematic_path))
+    print(f"Processing: {schematic_name}")
+
+    try:
+        # 1. Load schematic and get bounds
+        schematic = load_schematic(schematic_path)
+        bounds = get_schematic_bounds(schematic)
+
+        # 2. Create and stage in a temporary void world
+        temp_id = str(uuid.uuid4())
+        world_path = os.path.join(args.temp_dir, 'worlds', f"{temp_id}.construction")
+        void_world = create_void_world(world_path)
+        paste_and_save(void_world, schematic, bounds)
+        schematic.close()
+
+        # 3. Render from multiple isometric views
+        ISOMETRIC_VECTORS = [(-1.0, -0.8, -1.0), (1.0, -0.8, -1.0), (1.0, -0.8, 1.0), (-1.0, -0.8, 1.0)]
+        for i, view_vec in enumerate(ISOMETRIC_VECTORS):
+            output_image_path = os.path.join(args.output_dir, f"{schematic_name}_iso_{i}.png")
+            
+            # 4. Calculate camera and generate scene file
+            camera_params = calculate_camera_parameters(bounds, view_vec, args.fov, args.width / args.height)
+            scene_dir = os.path.join(args.temp_dir, 'scenes', f"{temp_id}_iso_{i}")
+            generate_scene_file(scene_dir, world_path, camera_params, args.width, args.height, args.spp)
+
+            # 5. Render with Chunky
+            render_scene_with_chunky(args.chunky_path, scene_dir, output_image_path, 1) # Threads managed by ProcessPoolExecutor
+        
+        return f"Successfully processed {schematic_name}"
+
+    except Exception as e:
+        return f"Failed to process {schematic_name}: {e}"
+    finally:
+        # 6. Cleanup is handled outside the worker for simplicity
+        pass
+
+# --- Script Entry Point ---
+
+def main():
+    parser = argparse.ArgumentParser(description="Automated Minecraft schematic to 2D image rendering pipeline.")
+    parser.add_argument("--input_dir", required=True, help="Directory containing.schem files.")
+    parser.add_argument("--output_dir", required=True, help="Directory to save rendered.png images.")
+    parser.add_argument("--chunky_path", default="ChunkyLauncher.jar", help="Path to ChunkyLauncher.jar.")
+    parser.add_argument("--temp_dir", default="./temp", help="Directory for temporary files.")
+    parser.add_argument("--workers", type=int, default=os.cpu_count(), help="Number of parallel processes to run.")
+    parser.add_argument("--width", type=int, default=512, help="Output image width.")
+    parser.add_argument("--height", type=int, default=512, help="Output image height.")
+    parser.add_argument("--spp", type=int, default=256, help="Samples Per Pixel for Chunky render.")
+    parser.add_argument("--fov", type=int, default=70, help="Camera Field of View in degrees.")
+    args = parser.parse_args()
+
+    # Setup directories
+    os.makedirs(args.output_dir, exist_ok=True)
+    if os.path.exists(args.temp_dir):
+        shutil.rmtree(args.temp_dir)
+    os.makedirs(os.path.join(args.temp_dir, 'worlds'))
+    os.makedirs(os.path.join(args.temp_dir, 'scenes'))
+
+    schematic_files = glob.glob(os.path.join(args.input_dir, '**', '*.schem'), recursive=True)
+    print(f"Found {len(schematic_files)} schematics to process.")
+
+    with ProcessPoolExecutor(max_workers=args.workers) as executor:
+        futures = [executor.submit(process_schematic, f, args) for f in schematic_files]
+        for future in as_completed(futures):
+            print(future.result())
+
+    # Final cleanup
+    print("Cleaning up temporary files...")
+    shutil.rmtree(args.temp_dir)
+    print("Pipeline finished.")
+
+if __name__ == "__main__":
+    main()
+
+5.3. Dependencies and Installation
+
+To run the pipeline, the following dependencies must be installed:
+
+    Python Packages: The required Python libraries can be installed via pip.
+
+    # requirements.txt
+    amulet-core
+    numpy
+
+    Installation command:
+    Bash
+
+    pip install -r requirements.txt
+
+    Java: A recent version of the Java Runtime Environment (JRE) is required to run Chunky.
+
+    Chunky: The ChunkyLauncher.jar file must be present in the project's root directory or specified via the --chunky_path argument. The initial setup (--update, -download-mc) must be performed as described in Section 3.1.
+
+5.4. Execution and Scalability
+
+The pipeline is executed from the command line, providing paths to the necessary directories and executables.
+
+Sample Execution Command:
+Bash
+
+python pipeline.py \
+    --input_dir./schematics_in \
+    --output_dir./images_out \
+    --chunky_path./ChunkyLauncher.jar \
+    --workers 8 \
+    --width 512 \
+    --height 512 \
+    --spp 256
+
+This command will process all .schem files found in ./schematics_in, using up to 8 parallel worker processes, and save the resulting 512x512 pixel images to ./images_out.
+
+Performance and Scalability: The pipeline's performance is primarily bound by two factors: disk I/O for creating temporary world files and CPU time for rendering. The rendering stage is the most computationally expensive. The use of a ProcessPoolExecutor allows the pipeline to leverage multi-core processors effectively, processing multiple schematics in parallel. For very large datasets, this entire pipeline can be containerized (e.g., with Docker) and deployed on cloud computing platforms (e.g., AWS EC2, Google Compute Engine) to scale horizontally across multiple machines.
